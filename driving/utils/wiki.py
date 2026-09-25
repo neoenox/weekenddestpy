@@ -1,21 +1,17 @@
-
-
-from driving.utils.api import Api
+from driving.utils.api import Api, ApiError
 
 
 class Wiki(Api):
     def getWiki(self, title):
+        try:
+            res = super().get(
+                "https://ja.wikipedia.org/w/api.php?action=query&format=json&prop=extracts&exintro&explaintext",
+                {"titles": title},
+            )
+            pages = res["query"]["pages"]
+        except (ApiError, KeyError, TypeError):
+            return None
 
-        res = super().get("https://ja.wikipedia.org/w/api.php?action=query&format=json&prop=extracts&exintro&explaintext",
-                          {"titles": title})
-
-        for v in res["query"]["pages"].values():
-            try:
-                return v["extract"]
-            except KeyError as e:
-                return None
-
-
-# r = Wiki()
-# print(r.getWiki("ふぇあふぇあえｆ"))
-# print(r.getWiki("六義園"))
+        for value in pages.values():
+            return value.get("extract")
+        return None
