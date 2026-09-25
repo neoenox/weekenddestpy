@@ -7,6 +7,15 @@
     <div class="container">
         <div class="mt-5 mb-5 display-1 kiwi_font">週末どこ行く？</div>
         <form action="{% url 'driving:driving_index' %}" method="get">
+            {% if form.non_field_errors %}
+                <div class="alert alert-danger" role="alert">{{ form.non_field_errors }}</div>
+            {% endif %}
+            {% if form.src.errors %}
+                <div class="alert alert-danger" role="alert">{{ form.src.errors }}</div>
+            {% endif %}
+            {% if form.distance.errors %}
+                <div class="alert alert-danger" role="alert">{{ form.distance.errors }}</div>
+            {% endif %}
             <div class="input-group col-md-auto mb-3">
                 <span class="input-group-text kiwi_font" id="basic-addon1">出発地</span>
                 {{ form.src }}
