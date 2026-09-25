@@ -17,7 +17,7 @@ class DrivingViewTests(TestCase):
             )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "有効な数値を入力してください")
+        self.assertTrue(response.context["form"]["distance"].errors)
         get_geo.assert_not_called()
 
     @patch(
