@@ -33,6 +33,32 @@ class DrivingViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "目的地データがありません")
 
+
+    @patch(
+        "driving.views.Geo.getGeo",
+        return_value={"result": {"latitude": 35.0, "longitude": 139.0}},
+    )
+    @patch("driving.views.Route.getRoute")
+    def test_no_destination_in_requested_range_returns_distance_error(
+        self, get_route, _get_geo
+    ):
+        Dest.objects.create(
+            name="Far Away",
+            latitude="36.0",
+            longitude="140.0",
+            address="address",
+        )
+
+        response = self.client.get(
+            reverse("driving:driving_index"),
+            {"src": "Tokyo", "distance": "30"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "指定距離内に候補がありません")
+        self.assertTrue(response.context["form"]["distance"].errors)
+        get_route.assert_not_called()
+
     @patch("driving.views.Geo.getGeo", side_effect=ApiError("upstream failed"))
     def test_upstream_api_error_returns_form_error(self, _get_geo):
         Dest.objects.create(
