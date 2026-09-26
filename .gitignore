@@ -1,2 +1,12 @@
 .env
 aws_key/weekenddest.pem
+
+# Python bytecode/cache
+__pycache__/
+*.py[cod]
+
+# Local database
+db.sqlite3
+
+# collectstatic output (source assets live in /static)
+weekenddestpy/static/
