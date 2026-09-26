@@ -39,11 +39,15 @@ def driving_index(request):
             if distance_param * 0.9 <= distance <= distance_param:
                 candidates.append(destination)
 
-        if not candidates:
-            candidates = destinations
+        if not destinations:
+            form.add_error(None, "目的地データがありません。管理者にお問い合わせください。")
+            return render(request, "driving/index.html", {"form": form})
 
         if not candidates:
-            form.add_error(None, "目的地データがありません。管理者にお問い合わせください。")
+            form.add_error(
+                "distance",
+                "指定距離内に候補がありません。距離を広げて再度お試しください。",
+            )
             return render(request, "driving/index.html", {"form": form})
 
         choice = random.choice(candidates)
