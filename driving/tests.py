@@ -33,6 +33,67 @@ class DrivingViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "目的地データがありません")
 
+    @patch(
+        "driving.views.Geo.getGeo",
+        return_value={"result": {"latitude": 35.0, "longitude": 139.0}},
+    )
+    def test_no_candidate_in_requested_distance_returns_form_error(self, _get_geo):
+        Dest.objects.create(
+            name="Far Away",
+            latitude="36.0",
+            longitude="140.0",
+            address="address",
+        )
+
+        with patch("driving.views.Route.getRoute") as get_route:
+            response = self.client.get(
+                reverse("driving:driving_index"),
+                {"src": "Tokyo", "distance": "30"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "指定距離内に候補がありません")
+        get_route.assert_not_called()
+
+    @patch(
+        "driving.views.Geo.getGeo",
+        return_value={"result": {"latitude": 35.0, "longitude": 139.0}},
+    )
+    @patch("driving.views.geodesic")
+    @patch("driving.views.Wiki.getWiki", return_value="")
+    @patch(
+        "driving.views.Route.getRoute",
+        return_value={
+            "result": [
+                {
+                    "distance": {
+                        "highway": "30 km",
+                        "localway": "29 km",
+                    }
+                }
+            ]
+        },
+    )
+    def test_candidate_inside_requested_distance_is_selected(
+        self, _get_route, _get_wiki, geodesic, _get_geo
+    ):
+        geodesic.return_value.km = 29.0
+        Dest.objects.create(
+            name="Near",
+            latitude="35.3",
+            longitude="139.0",
+            address="address",
+        )
+
+        response = self.client.get(
+            reverse("driving:driving_index"),
+            {"src": "Tokyo", "distance": "30"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "driving/list.html")
+        self.assertEqual(response.context["name"], "Near")
+
     @patch("driving.views.Geo.getGeo", side_effect=ApiError("upstream failed"))
     def test_upstream_api_error_returns_form_error(self, _get_geo):
         Dest.objects.create(
