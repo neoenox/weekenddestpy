@@ -1,3 +1,4 @@
+from contextlib import ExitStack
 from unittest.mock import Mock, patch
 
 import requests
@@ -145,17 +146,18 @@ class DrivingViewTests(TestCase):
                 {"distance": {"highway": "30 km", "localway": "29 km"}}
             ]
         }
-        with (
-            patch(
-                "driving.views.Geo.getGeo",
-                return_value={
-                    "result": {"latitude": 35.0, "longitude": 139.0}
-                },
-            ) as get_geo,
-            patch("driving.views.geodesic") as geodesic,
-            patch("driving.views.Route.getRoute", return_value=route),
-            patch("driving.views.Wiki.getWiki", return_value=""),
-        ):
+        with ExitStack() as stack:
+            get_geo = stack.enter_context(
+                patch(
+                    "driving.views.Geo.getGeo",
+                    return_value={
+                        "result": {"latitude": 35.0, "longitude": 139.0}
+                    },
+                )
+            )
+            geodesic = stack.enter_context(patch("driving.views.geodesic"))
+            stack.enter_context(patch("driving.views.Route.getRoute", return_value=route))
+            stack.enter_context(patch("driving.views.Wiki.getWiki", return_value=""))
             geodesic.return_value.km = 29.0
             response = self.client.get(
                 reverse("driving:driving_index"),
@@ -180,12 +182,11 @@ class DrivingViewTests(TestCase):
                 {"distance": {"highway": "30 km", "localway": "29 km"}}
             ]
         }
-        with (
-            patch("driving.views.Geo.getGeo") as get_geo,
-            patch("driving.views.geodesic") as geodesic,
-            patch("driving.views.Route.getRoute", return_value=route),
-            patch("driving.views.Wiki.getWiki", return_value=""),
-        ):
+        with ExitStack() as stack:
+            get_geo = stack.enter_context(patch("driving.views.Geo.getGeo"))
+            geodesic = stack.enter_context(patch("driving.views.geodesic"))
+            stack.enter_context(patch("driving.views.Route.getRoute", return_value=route))
+            stack.enter_context(patch("driving.views.Wiki.getWiki", return_value=""))
             geodesic.return_value.km = 29.0
             response = self.client.get(
                 reverse("driving:driving_index"),
