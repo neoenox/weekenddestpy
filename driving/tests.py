@@ -1,10 +1,11 @@
+from contextlib import ExitStack
 from unittest.mock import Mock, patch
 
 import requests
 from django.test import TestCase
 from django.urls import reverse
 
-from driving.models import Dest
+from driving.models import Dest, geoCash
 from driving.utils.api import Api, ApiError
 
 
@@ -111,6 +112,89 @@ class DrivingViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "外部サービスから経路情報を取得できませんでした")
 
+
+    def test_invalid_geocoding_coordinates_are_not_cached(self):
+        for index, (latitude, longitude) in enumerate(
+            [("nan", "139"), ("inf", "139"), ("91", "139"), ("35", "181")]
+        ):
+            with self.subTest(latitude=latitude, longitude=longitude):
+                src = f"invalid-{index}"
+                with patch(
+                    "driving.views.Geo.getGeo",
+                    return_value={
+                        "result": {"latitude": latitude, "longitude": longitude}
+                    },
+                ):
+                    response = self.client.get(
+                        reverse("driving:driving_index"),
+                        {"src": src, "distance": "30"},
+                    )
+
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(
+                    response, "外部サービスから経路情報を取得できませんでした"
+                )
+                self.assertFalse(geoCash.objects.filter(src=src).exists())
+
+    def test_invalid_cached_geocoding_coordinates_are_replaced(self):
+        geoCash.objects.create(src="Tokyo", latitude="nan", longitude="139")
+        Dest.objects.create(
+            name="Near", latitude="35.3", longitude="139.0", address="address"
+        )
+        route = {
+            "result": [
+                {"distance": {"highway": "30 km", "localway": "29 km"}}
+            ]
+        }
+        with ExitStack() as stack:
+            get_geo = stack.enter_context(
+                patch(
+                    "driving.views.Geo.getGeo",
+                    return_value={
+                        "result": {"latitude": 35.0, "longitude": 139.0}
+                    },
+                )
+            )
+            geodesic = stack.enter_context(patch("driving.views.geodesic"))
+            stack.enter_context(patch("driving.views.Route.getRoute", return_value=route))
+            stack.enter_context(patch("driving.views.Wiki.getWiki", return_value=""))
+            geodesic.return_value.km = 29.0
+            response = self.client.get(
+                reverse("driving:driving_index"),
+                {"src": "Tokyo", "distance": "30"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "driving/list.html")
+        get_geo.assert_called_once_with("Tokyo")
+        cache = geoCash.objects.get(src="Tokyo")
+        self.assertEqual(cache.latitude, "35.0")
+        self.assertEqual(cache.longitude, "139.0")
+        self.assertEqual(geoCash.objects.filter(src="Tokyo").count(), 1)
+
+    def test_valid_cached_geocoding_coordinates_skip_external_lookup(self):
+        geoCash.objects.create(src="Tokyo", latitude="35", longitude="139")
+        Dest.objects.create(
+            name="Near", latitude="35.3", longitude="139.0", address="address"
+        )
+        route = {
+            "result": [
+                {"distance": {"highway": "30 km", "localway": "29 km"}}
+            ]
+        }
+        with ExitStack() as stack:
+            get_geo = stack.enter_context(patch("driving.views.Geo.getGeo"))
+            geodesic = stack.enter_context(patch("driving.views.geodesic"))
+            stack.enter_context(patch("driving.views.Route.getRoute", return_value=route))
+            stack.enter_context(patch("driving.views.Wiki.getWiki", return_value=""))
+            geodesic.return_value.km = 29.0
+            response = self.client.get(
+                reverse("driving:driving_index"),
+                {"src": "Tokyo", "distance": "30"},
+            )
+
+        self.assertTemplateUsed(response, "driving/list.html")
+        get_geo.assert_not_called()
 
 class ApiTests(TestCase):
     @patch("driving.utils.api.requests.get")
