@@ -1,3 +1,4 @@
+import math
 import random
 
 from django.shortcuts import render
@@ -99,20 +100,39 @@ def driving_index(request):
 
 def _resolve_source(src_param):
     geocash = geoCash.objects.filter(src=src_param).first()
-    if geocash is not None:
+    if geocash is not None and _valid_coordinates(geocash.latitude, geocash.longitude):
         return [geocash.latitude, geocash.longitude]
 
     geo_response = Geo().getGeo(src_param)
     geo_result = geo_response["result"]
     latitude = str(geo_result["latitude"])
     longitude = str(geo_result["longitude"])
-    # Validate that coordinates are numeric before persisting the cache.
-    float(latitude)
-    float(longitude)
+    if not _valid_coordinates(latitude, longitude):
+        raise ValueError("geocoding returned invalid coordinates")
 
-    geoCash.objects.create(
-        src=src_param,
-        latitude=latitude,
-        longitude=longitude,
-    )
+    if geocash is not None:
+        # Repair previously cached invalid coordinates instead of reusing them.
+        geocash.latitude = latitude
+        geocash.longitude = longitude
+        geocash.save(update_fields=["latitude", "longitude"])
+    else:
+        geoCash.objects.create(
+            src=src_param,
+            latitude=latitude,
+            longitude=longitude,
+        )
     return [latitude, longitude]
+
+
+def _valid_coordinates(latitude, longitude):
+    try:
+        lat = float(latitude)
+        lon = float(longitude)
+    except (TypeError, ValueError, OverflowError):
+        return False
+    return (
+        math.isfinite(lat)
+        and math.isfinite(lon)
+        and -90 <= lat <= 90
+        and -180 <= lon <= 180
+    )
